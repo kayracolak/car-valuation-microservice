@@ -1,5 +1,13 @@
 # Araç Değerleme Sistemi - Mikroservis Mimarisi (HW2)
 
+## Grup Üyeleri
+| İsim | Numara |
+|---|---|
+| Kayra Çolak | B2180.060068 |
+| Mustafa Yalçın Canbay | B2180.060055 |
+| Gökberk Dökmen | B2180.060041 |
+| Umut Sınır | B2180.060013 |
+
 Bu proje, araç değerleme işlemini gerçekleştiren dağıtık bir mikroservis sistemidir. Servisler birbirleriyle hem **senkron (REST)** hem de **asenkron (RabbitMQ)** yöntemlerle iletişim kurar.
 
 ## Sistem Mimarisi
