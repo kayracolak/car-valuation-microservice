@@ -1,0 +1,15 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Kodları Çek (Checkout)
+      uses: actions/checkout@v3
+
+    - name: Docker İmajını Test Et (Build)
+      run: docker build . --file Dockerfile --tag arac-degerleme:latest

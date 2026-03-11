@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(source /Users/kayracolak/araba-degerleme-odevi/.venv/bin/activate && echo \"Virtual environment activated\" && which python && python --version)",
+      "Bash(.venv/bin/python -c \"from models import AracOzellikleri; from services import fiyat_hesapla; arac = AracOzellikleri\\(marka='Toyota', model_yili=2020, kilometre=50000, hasar_kaydi=False\\); print\\('Fiyat:', fiyat_hesapla\\(arac\\), 'TL'\\)\")",
+      "Bash(git init:*)"
+    ]
+  }
+}
