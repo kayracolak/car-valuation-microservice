@@ -82,3 +82,20 @@ curl -X POST http://localhost:8080/api/v1/degerleme \
 
 ### RabbitMQ Yönetim Paneli
 Tarayıcıdan `http://localhost:15672` adresine git. Kullanıcı adı: `guest`, Şifre: `guest`
+
+## Sistem Mimarisi (Architecture Diagram)
+
+```mermaid
+graph TD
+    Client([Kullanıcı / Tarayıcı]) -->|HTTP İsteği| Gateway[API Gateway :8000]
+
+    Gateway -->|POST /login| Auth[Auth Service :8001]
+    Auth -.->|JWT Token| Gateway
+
+    Gateway -->|POST /degerleme + JWT| Valuation[Valuation Service :8002]
+
+    Valuation -->|AMQP Mesajı| RabbitMQ[(RabbitMQ :5672)]
+
+    RabbitMQ -->|Event Dinleme| Notification[Notification Service :8003]
+    Notification -.->|Log/Email| UserLog([Kullanıcıya Bildirim])
+```
