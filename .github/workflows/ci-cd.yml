@@ -1,0 +1,80 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─────────────────────────────────────────
+  # 1. TEST
+  # ─────────────────────────────────────────
+  test:
+    name: Testleri Çalıştır
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Kodu İndir
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 Kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Bağımlılıkları Yükle
+        run: pip install -r requirements-test.txt
+
+      - name: Testleri Çalıştır
+        run: pytest tests/ -v --tb=short
+        env:
+          OPENAI_API_KEY: test-dummy-key
+
+  # ─────────────────────────────────────────
+  # 2. BUILD
+  # ─────────────────────────────────────────
+  build:
+    name: Docker İmajlarını Derle
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Kodu İndir
+        uses: actions/checkout@v4
+
+      - name: Docker İmajlarını Derle
+        run: docker compose build
+
+  # ─────────────────────────────────────────
+  # 3. DEPLOY (sadece main branch'e push)
+  # ─────────────────────────────────────────
+  deploy:
+    name: Sistemi Deploy Et
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+    steps:
+      - name: Kodu İndir
+        uses: actions/checkout@v4
+
+      - name: Deploy Özeti
+        run: |
+          echo "========================================"
+          echo "  Araç Değerleme Sistemi - CI/CD"
+          echo "========================================"
+          echo ""
+          echo "✓ Testler geçti"
+          echo "✓ Docker imajları derlendi"
+          echo ""
+          echo "─── Docker Compose ile Deploy ───"
+          echo "  docker compose down"
+          echo "  docker compose up -d --build"
+          echo ""
+          echo "─── Kubernetes ile Deploy ───"
+          echo "  kubectl apply -f k8s/"
+          echo "========================================"

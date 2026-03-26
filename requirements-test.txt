@@ -1,0 +1,8 @@
+pytest
+httpx
+fastapi
+uvicorn
+pyjwt
+pika
+openai
+pydantic

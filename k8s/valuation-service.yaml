@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valuation-service
+  namespace: araba-degerleme
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: valuation-service
+  template:
+    metadata:
+      labels:
+        app: valuation-service
+    spec:
+      containers:
+        - name: valuation-service
+          image: araba-degerleme/valuation-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: OPENAI_API_KEY
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: valuation-service
+  namespace: araba-degerleme
+spec:
+  selector:
+    app: valuation-service
+  ports:
+    - port: 8000
+      targetPort: 8000

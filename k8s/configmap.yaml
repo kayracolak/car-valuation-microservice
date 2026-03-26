@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: araba-degerleme
+data:
+  RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+  AUTH_SERVICE_URL: "http://auth-service:8001"
+  VALUATION_SERVICE_URL: "http://valuation-service:8000"
+  JWT_ALGORITHM: "HS256"
