@@ -1,0 +1,33 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: api-gateway
+    static_configs:
+      - targets: ["api-gateway:8080"]
+    metrics_path: /metrics
+
+  - job_name: auth-service
+    static_configs:
+      - targets: ["auth-service:8001"]
+    metrics_path: /metrics
+
+  - job_name: valuation-service
+    static_configs:
+      - targets: ["valuation-service:8000"]
+    metrics_path: /metrics
+
+  - job_name: market-data-service
+    static_configs:
+      - targets: ["market-data-service:8002"]
+    metrics_path: /metrics
+
+  - job_name: rabbitmq
+    static_configs:
+      - targets: ["rabbitmq:15692"]
+    metrics_path: /metrics

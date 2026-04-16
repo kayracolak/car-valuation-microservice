@@ -1,3 +1,9 @@
 fastapi
 uvicorn
 pyjwt
+python-json-logger
+prometheus-fastapi-instrumentator
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation-fastapi
+opentelemetry-exporter-otlp-proto-http

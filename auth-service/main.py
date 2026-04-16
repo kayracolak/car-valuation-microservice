@@ -1,22 +1,66 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
-from datetime import datetime, timedelta
-import jwt
-import hashlib
 import logging
+import sys
+import hashlib
+from contextvars import ContextVar
+from datetime import datetime, timedelta
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel
+import jwt
+from pythonjsonlogger import jsonlogger
+from prometheus_fastapi_instrumentator import Instrumentator
 
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+# ── Tracing setup ──────────────────────────────────────────────────────────────
+_resource = Resource.create({"service.name": "auth-service"})
+_provider = TracerProvider(resource=_resource)
+_provider.add_span_processor(
+    BatchSpanProcessor(OTLPSpanExporter(endpoint="http://jaeger:4318/v1/traces"))
+)
+trace.set_tracer_provider(_provider)
+
+# ── Structured logging ─────────────────────────────────────────────────────────
+_trace_id_var: ContextVar[str] = ContextVar("trace_id", default="")
+
+SERVICE_NAME = "auth-service"
+
+
+class _ContextFilter(logging.Filter):
+    def filter(self, record):
+        record.service = SERVICE_NAME
+        record.trace_id = _trace_id_var.get("")
+        return True
+
+
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setFormatter(
+    jsonlogger.JsonFormatter(fmt="%(asctime)s %(levelname)s %(name)s %(message)s")
+)
+_handler.addFilter(_ContextFilter())
+logging.root.handlers = [_handler]
+logging.root.setLevel(logging.INFO)
+logger = logging.getLogger(SERVICE_NAME)
+
+# ── App ────────────────────────────────────────────────────────────────────────
 app = FastAPI(title="Auth Service")
+FastAPIInstrumentor.instrument_app(app)
+try:
+    Instrumentator().instrument(app).expose(app)
+except Exception:
+    pass  # Aynı process'te çoklu servis yüklendiğinde (test ortamı) çakışmayı önle
 
 SECRET_KEY = "gizli_jwt_anahtari_degistir_123"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# In-memory kullanıcı veritabanı
-users_db = {}
+users_db: dict[str, str] = {}
 
 
 class UserRegister(BaseModel):
@@ -29,6 +73,15 @@ class UserLogin(BaseModel):
     password: str
 
 
+@app.middleware("http")
+async def trace_id_middleware(request: Request, call_next):
+    trace_id = request.headers.get("X-Trace-ID", "")
+    token = _trace_id_var.set(trace_id)
+    response = await call_next(request)
+    _trace_id_var.reset(token)
+    return response
+
+
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -38,6 +91,15 @@ def create_access_token(data: dict) -> str:
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "service": SERVICE_NAME,
+        "users_registered": len(users_db),
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -192,7 +254,7 @@ def register(user: UserRegister):
     if user.username in users_db:
         raise HTTPException(status_code=400, detail="Bu kullanıcı adı zaten alınmış!")
     users_db[user.username] = hash_password(user.password)
-    logger.info(f"Yeni kullanıcı kaydedildi: {user.username}")
+    logger.info("Yeni kullanıcı kaydedildi", extra={"username": user.username})
     return {"mesaj": f"'{user.username}' kullanıcısı başarıyla oluşturuldu!"}
 
 
@@ -200,8 +262,8 @@ def register(user: UserRegister):
 def login(user: UserLogin):
     stored_hash = users_db.get(user.username)
     if not stored_hash or stored_hash != hash_password(user.password):
-        logger.warning(f"Başarısız giriş denemesi: {user.username}")
+        logger.warning("Başarısız giriş denemesi", extra={"username": user.username})
         raise HTTPException(status_code=401, detail="Kullanıcı adı veya şifre hatalı!")
     token = create_access_token({"sub": user.username})
-    logger.info(f"Başarılı giriş: {user.username}")
+    logger.info("Başarılı giriş", extra={"username": user.username})
     return {"access_token": token, "token_type": "bearer"}

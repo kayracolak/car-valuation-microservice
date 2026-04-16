@@ -1,0 +1,27 @@
+filebeat.autodiscover:
+  providers:
+    - type: docker
+      hints.enabled: true
+      hints.default_config:
+        type: container
+        paths:
+          - /var/lib/docker/containers/${data.container.id}/*.log
+
+processors:
+  - add_docker_metadata:
+      host: "unix:///var/run/docker.sock"
+  - decode_json_fields:
+      fields: ["message"]
+      target: ""
+      overwrite_keys: true
+      add_error_key: true
+
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  index: "microservices-logs-%{+yyyy.MM.dd}"
+
+setup.template.name: "microservices"
+setup.template.pattern: "microservices-*"
+setup.ilm.enabled: false
+
+logging.level: warning
