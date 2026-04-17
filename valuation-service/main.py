@@ -591,7 +591,7 @@ tr:last-child td{border-bottom:none}
     <div class="grid2" style="margin-top:14px">
       <div>
         <label>Model Yılı</label>
-        <input type="number" id="model_yili" placeholder="2020" min="1990" max="2025">
+        <input type="number" id="model_yili" placeholder="2020" min="1990" max="2026">
       </div>
       <div>
         <label>Kilometre</label>
@@ -829,6 +829,7 @@ async function degerle() {
     chatHistory = [];
     renderResults(data);
     document.getElementById('results').classList.remove('hidden');
+    document.getElementById('results').scrollIntoView({behavior:'smooth', block:'start'});
     switchTab('ozet');
     // Init chat context
     const ctx = `${marka} ${model_yili} | ${Number(kilometre).toLocaleString('tr-TR')} km | ${fmtTL(data.hesaplanan_fiyat_tl)} | ${il}`;
@@ -1028,7 +1029,7 @@ async function loadKoc() {
     const data = await res.json();
     renderKoc(data, satisFiyati);
   } catch(e) {
-    resultsEl.innerHTML = '<div class="error-msg">AI\'ya ulaşılamadı. Lütfen tekrar deneyin.</div>';
+    resultsEl.innerHTML = '<div class="error-msg">AI servisine ulasilamiyor. Lutfen tekrar deneyin.</div>';
   } finally {
     btn.disabled = false;
     btn.textContent = 'Argümanları Oluştur';
