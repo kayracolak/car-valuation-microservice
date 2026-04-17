@@ -1,15 +1,19 @@
 import logging
+import os
 import sys
-import hashlib
 from contextvars import ContextVar
 from datetime import datetime, timedelta
 
+import bcrypt
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 import jwt
 from pythonjsonlogger import jsonlogger
 from prometheus_fastapi_instrumentator import Instrumentator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -49,16 +53,24 @@ logging.root.setLevel(logging.INFO)
 logger = logging.getLogger(SERVICE_NAME)
 
 # ── App ────────────────────────────────────────────────────────────────────────
+_limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(title="Auth Service")
+app.state.limiter = _limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 FastAPIInstrumentor.instrument_app(app)
 try:
     Instrumentator().instrument(app).expose(app)
 except Exception:
-    pass  # Aynı process'te çoklu servis yüklendiğinde (test ortamı) çakışmayı önle
+    pass
 
-SECRET_KEY = "gizli_jwt_anahtari_degistir_123"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "gizli_jwt_anahtari_degistir_123")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+if len(SECRET_KEY) < 32:
+    logger.warning("JWT_SECRET_KEY 32 karakterden kısa — production için güvenli bir key kullanın!")
 
 users_db: dict[str, str] = {}
 
@@ -83,7 +95,11 @@ async def trace_id_middleware(request: Request, call_next):
 
 
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
 def create_access_token(data: dict) -> str:
@@ -250,7 +266,8 @@ def ana_sayfa():
 
 
 @app.post("/register", status_code=201)
-def register(user: UserRegister):
+@_limiter.limit("10/minute")
+def register(request: Request, user: UserRegister):
     if user.username in users_db:
         raise HTTPException(status_code=400, detail="Bu kullanıcı adı zaten alınmış!")
     users_db[user.username] = hash_password(user.password)
@@ -259,9 +276,10 @@ def register(user: UserRegister):
 
 
 @app.post("/login")
-def login(user: UserLogin):
+@_limiter.limit("20/minute")
+def login(request: Request, user: UserLogin):
     stored_hash = users_db.get(user.username)
-    if not stored_hash or stored_hash != hash_password(user.password):
+    if not stored_hash or not verify_password(user.password, stored_hash):
         logger.warning("Başarısız giriş denemesi", extra={"username": user.username})
         raise HTTPException(status_code=401, detail="Kullanıcı adı veya şifre hatalı!")
     token = create_access_token({"sub": user.username})

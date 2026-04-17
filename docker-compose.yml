@@ -26,6 +26,8 @@ services:
     container_name: auth-service
     ports:
       - "8001:8001"
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-gizli_jwt_anahtari_degistir_123}
     networks:
       - microservice-network
     healthcheck:
@@ -81,6 +83,8 @@ services:
     container_name: api-gateway
     ports:
       - "8080:8080"
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-gizli_jwt_anahtari_degistir_123}
     networks:
       - microservice-network
     depends_on:

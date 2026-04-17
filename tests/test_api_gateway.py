@@ -65,6 +65,7 @@ def test_degerleme_gecerli_token():
     token = token_olustur()
 
     mock_resp = MagicMock()
+    mock_resp.status_code = 200
     mock_resp.json.return_value = {
         "hesaplanan_fiyat_tl": 500000,
         "ai_analizi": {"piyasa_yorumu": "Makul.", "ozet": "İyi."},
@@ -89,6 +90,7 @@ def test_degerleme_gecerli_token():
 def test_register_proxy():
     """Register isteği auth-service'e iletilmeli."""
     mock_resp = MagicMock()
+    mock_resp.status_code = 201
     mock_resp.json.return_value = {"mesaj": "'testuser' kullanıcısı başarıyla oluşturuldu!"}
 
     mock_http = AsyncMock()
@@ -99,12 +101,13 @@ def test_register_proxy():
     with patch("httpx.AsyncClient", return_value=mock_http):
         response = client.post("/register", json={"username": "testuser", "password": "pass"})
 
-    assert response.status_code == 200
+    assert response.status_code == 201
 
 
 def test_login_proxy():
     """Login isteği auth-service'e iletilmeli."""
     mock_resp = MagicMock()
+    mock_resp.status_code = 200
     mock_resp.json.return_value = {"access_token": "eyJxxx", "token_type": "bearer"}
 
     mock_http = AsyncMock()

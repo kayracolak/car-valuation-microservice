@@ -2,6 +2,7 @@ fastapi
 uvicorn
 httpx
 pyjwt
+slowapi
 python-json-logger
 prometheus-fastapi-instrumentator
 opentelemetry-api

@@ -4,6 +4,8 @@ respx
 fastapi
 uvicorn
 pyjwt
+bcrypt
+slowapi
 pika
 openai
 pydantic
