@@ -116,6 +116,7 @@ _chatbot_breaker = pybreaker.CircuitBreaker(fail_max=5, reset_timeout=60, name="
 
 class PazarlikIstegi(BaseModel):
     marka: str
+    model: Optional[str] = ""
     model_yili: int
     kilometre: int
     hasar_kaydi: bool
@@ -301,6 +302,7 @@ def health():
                 "rabbitmq": "ok" if rabbitmq_ok else "unreachable",
                 "market_data_service": "ok" if market_ok else "unreachable",
                 "openai_key": "set" if os.getenv("OPENAI_API_KEY") else "missing",
+                "rapidapi_key": "set" if os.getenv("RAPIDAPI_KEY") else "missing",
                 "circuit_breaker": cb_state,
             },
         },

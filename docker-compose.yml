@@ -43,6 +43,8 @@ services:
       - "8000:8000"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - RAPIDAPI_KEY=${RAPIDAPI_KEY}
+      - USD_TO_TRL=${USD_TO_TRL:-35}
     networks:
       - microservice-network
     depends_on:
