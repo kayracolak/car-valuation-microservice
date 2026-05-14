@@ -33,7 +33,8 @@ def token_olustur(username="testuser", dakika=30):
 def test_health_check():
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json()["mesaj"] == "API Gateway çalışıyor!"
+    assert "text/html" in response.headers["content-type"]
+    assert "Araç Değerleme" in response.text
 
 
 def test_degerleme_auth_header_yok():
