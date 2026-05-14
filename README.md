@@ -20,7 +20,10 @@ Mikroservis mimarisiyle geliştirilmiş bir araç değerleme sistemi. Kullanıc�
 - Gözlemlenebilirlik: ELK, Prometheus + Grafana, OpenTelemetry + Jaeger, health check
 - Hata toleransı: circuit breaker, retry/backoff, dead letter queue
 - Piyasa zekası: Market Data Service (sahibinden.com / arabam.com ilhamlı)
+- Gerçek fiyat verisi: RapidAPI Vehicle Pricing entegrasyonu + marka bazlı 2026 Türkiye fiyat tablosu
+- Türkiye vergi hesabı: ÖTV (motor cc'ye göre), KDV, MTV, kasko, sigorta, devir masrafları
 - Gelişmiş AI: fiyat analizi, 6 aylık öngörü, AI chatbot, Pazarlık Koçu
+- Detaylı UI: 4 bölümlü form (kimlik, teknik, durum, konum) + 5 sekmeli sonuç
 
 ---
 
@@ -47,21 +50,24 @@ Mikroservis mimarisiyle geliştirilmiş bir araç değerleme sistemi. Kullanıc�
               ┌────────────────┐  ┌──────────────────────────┐
               │  AUTH SERVICE  │  │   VALUATION SERVICE      │
               │    :8001       │  │        :8000             │
-              │  · Kayıt/Giriş │  │  · Fiyat + DNA analizi   │
-              │  · bcrypt hash │  │  · GPT-4o-mini analizi   │
-              │  · JWT üretimi │  │  · Pazarlık Koçu (nano)  │
-              └────────────────┘  │  · AI chatbot            │
+              │  · Kayıt/Giriş │  │  · RapidAPI fiyat çekme  │
+              │  · bcrypt hash │  │  · Marka bazlı fallback  │
+              │  · JWT üretimi │  │  · GPT-4o-mini analizi   │
+              └────────────────┘  │  · Pazarlık Koçu (nano)  │
+                                  │  · AI chatbot            │
                                   │  · RabbitMQ yayını       │
                                   └──────────┬───────────────┘
-                                             │ HTTP
-                                             ▼
-                              ┌──────────────────────────┐
-                              │  MARKET DATA SERVICE     │
-                              │        :8002             │
-                              │  · Benzer ilanlar        │
-                              │  · Şehir bazlı fiyat     │
-                              │  · Talep skoru           │
-                              └──────────────────────────┘
+                                             │
+                       ┌─────────────────────┼─────────────────────┐
+                       │ HTTP                │ HTTPS               │ HTTP
+                       ▼                     ▼                     ▼
+              ┌────────────────┐   ┌──────────────────┐   ┌────────────────┐
+              │ MARKET DATA    │   │  RapidAPI        │   │  OpenAI API    │
+              │    :8002       │   │  Vehicle Pricing │   │  GPT-4o-mini   │
+              │ · Benzer ilan  │   │  (gerçek fiyat)  │   │  GPT-4.1-nano  │
+              │ · Şehir çarpan │   └──────────────────┘   └────────────────┘
+              │ · Talep skoru  │
+              └────────────────┘
                                              │ AMQP
                                              ▼
                               ┌──────────────────────────┐
@@ -91,6 +97,7 @@ graph TD
 
     Val -->|GPT-4o-mini analiz| OAI([OpenAI API])
     Val -->|GPT-4.1-nano pazarlık| OAI
+    Val -->|maker/model/year| RAPI([RapidAPI Vehicle Pricing])
     Val -->|HTTP| MDS[Market Data :8002]
     Val -->|AMQP| MQ[(RabbitMQ + DLQ)]
     MQ -->|Consume| Notif[Notification Service]
@@ -137,6 +144,8 @@ graph TD
 | Secret Yönetimi | Ortam değişkenleri (.env) |
 | Asenkron Mesajlaşma | RabbitMQ + pika |
 | AI Entegrasyonu | OpenAI GPT-4o-mini (analiz) + GPT-4.1-nano (pazarlık) |
+| Gerçek Fiyat Verisi | RapidAPI Vehicle Pricing API (httpx ile) |
+| Vergi Modeli | Türkiye ÖTV (motor cc/yakıt bazlı kademeli) + KDV + MTV |
 | Konteynerizasyon | Docker + Docker Compose |
 | Orkestrasyon | Kubernetes |
 | CI/CD | GitHub Actions |
@@ -167,11 +176,14 @@ cp .env.example .env
 
 `.env` içeriği:
 ```
-OPENAI_API_KEY=sk-proj-...
+OPENAI_API_KEY=sk-proj-...              # AI analiz + chatbot + pazarlık koçu için zorunlu
 JWT_SECRET_KEY=en-az-32-karakterlik-guclu-anahtar
+RAPIDAPI_KEY=...                        # Vehicle Pricing API (gerçek fiyat verisi); yoksa fallback devreye girer
+USD_TO_TRL=35                           # opsiyonel, varsayılan 35
 ```
 
 > `.env.example` git'e giden şablondur — gerçek değerleri `.env`'e yaz, bu dosya `.gitignore`'dadır.
+> `RAPIDAPI_KEY` yoksa sistem marka bazlı 2026 Türkiye fiyat tablosu + bileşik amortisman ile çalışır.
 
 ### 3. Başlat
 
@@ -199,14 +211,17 @@ docker-compose up -d --build   # kod değişikliği sonrası yeniden build
 
 | URL | Açıklama | Giriş |
 |---|---|---|
-| http://localhost:8000 | Araç değerleme arayüzü | — |
-| http://localhost:8001 | Giriş / Kayıt sayfası | — |
-| http://localhost:8080 | API Gateway | — |
+| **http://localhost:8080** | **Tek sayfa UI** — kayıt, giriş, değerleme, AI koç, asistan | — |
+| http://localhost:8000 | Valuation Service (API) | — |
+| http://localhost:8001 | Auth Service (API) | — |
+| http://localhost:8002 | Market Data Service (API) | — |
 | http://localhost:15672 | RabbitMQ paneli | `guest` / `guest` |
 | http://localhost:3000 | Grafana dashboard | `admin` / `admin` |
 | http://localhost:16686 | Jaeger tracing | — |
 | http://localhost:9090 | Prometheus | — |
 | http://localhost:5601 | Kibana logları | — |
+
+> Tüm kullanıcı işlemleri 8080'den geçer. Diğer portlar yalnızca API endpoint'leri sunar.
 
 ### Health Check
 
@@ -277,19 +292,21 @@ curl -X POST http://localhost:8080/login \
 curl -X POST http://localhost:8080/api/v1/degerleme \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <TOKEN>" \
-  -d '{"marka": "Toyota", "model_yili": 2020, "kilometre": 50000, "hasar_kaydi": false, "il": "istanbul"}'
+  -d '{"marka":"Toyota","model":"Corolla","model_yili":2020,"kilometre":50000,"hasar_kaydi":false,"il":"istanbul"}'
 ```
+
+> `model` alanı opsiyoneldir; verilirse RapidAPI Vehicle Pricing endpoint'inden gerçek fiyat çekilir. Verilmezse marka bazlı 2026 baz fiyat + bileşik amortisman uygulanır.
 
 **Örnek yanıt:**
 ```json
 {
-  "hesaplanan_fiyat_tl": 551745,
+  "hesaplanan_fiyat_tl": 1245000,
   "faktorler": {
-    "taban_fiyat": 800000,
-    "yas_etkisi": -150000,
-    "kilometre_etkisi": -90000,
+    "taban_fiyat": 1320000,
+    "yas_etkisi": 0,
+    "kilometre_etkisi": -55000,
     "hasar_etkisi": 0,
-    "piyasa_dalgalanmasi": -8255
+    "piyasa_dalgalanmasi": -20000
   },
   "ai_analizi": {
     "piyasa_yorumu": "Fiyat piyasa koşullarına göre rekabetçi.",
@@ -331,29 +348,70 @@ curl -X POST http://localhost:8080/api/v1/arac-asistan \
 
 ## Kullanıcı Arayüzü
 
-Değerleme arayüzü 4 sekmeli tasarıma sahiptir:
+Tek sayfa SPA — http://localhost:8080/ üzerinden tüm akış.
+
+### Giriş Formu — 4 Bölüm
+
+| Bölüm | İçerik |
+|---|---|
+| 🏷️ **Araç Kimliği** | Marka, model, yıl |
+| ⚙️ **Teknik Özellikler** | Yakıt tipi (benzin/dizel/hibrit/elektrik/LPG), vites, kasa tipi, motor cc, beygir, çekiş (FWD/RWD/AWD) |
+| 🔍 **Durum & Görünüm** | Kilometre, boyalı panel sayısı, renk (11 seçenek), hasar kaydı, değişen parça |
+| 📍 **Konum** | Şehir seçimi (fiyat % indikatörlü) |
+
+> Backend yalnızca marka/model/yıl/km/hasar/il alır. Diğer alanlar **client-side çarpan** olarak uygulanır (örn. AWD +13%, SUV +16%, hibrit +8%).
+
+### Sonuç Sekmeleri — 5 Sekme
 
 | Sekme | İçerik |
 |---|---|
-| **Özet** | Animasyonlu fiyat sayacı, piyasa pozisyon çubuğu, SVG talep göstergesi, Fiyat DNA analizi |
-| **Piyasa** | Benzer ilanlar, şehir bazlı fiyat karşılaştırması, değer tahmini, uyarılar |
-| **AI Koç** | 6 aylık öngörü, ideal alıcı profili, satış taktiği + Pazarlık Koçu aracı |
-| **Asistan** | Araç bağlamını bilen AI chatbot |
+| 📊 **Özet** | Animasyonlu fiyat sayacı, piyasa pozisyon çubuğu, SVG talep göstergesi, Fiyat DNA analizi (özellik düzeltmesi dahil) |
+| 🏛️ **Vergiler & Maliyet** | ÖTV (motor cc'ye göre %10–220), KDV (%20), MTV, kasko, sigorta, yıllık bakım, muayene, noter devir ücreti |
+| 📈 **Piyasa** | Benzer ilanlar, şehir bazlı fiyat karşılaştırması, değer tahmini, uyarılar |
+| 🧠 **AI Koç** | 6 aylık öngörü, ideal alıcı profili, satış taktiği + Pazarlık Koçu aracı |
+| 💬 **Asistan** | Araç bağlamını bilen AI chatbot |
 
 ---
 
 ## Fiyat Hesaplama Algoritması
 
+**Önceliklendirme:**
+1. Eğer `model` verildi ve `RAPIDAPI_KEY` aktifse → **RapidAPI Vehicle Pricing** endpoint'inden o yılın gerçek fiyat aralığı çekilir, USD → TRL çevrilir
+2. Aksi halde → **marka bazlı 2026 Türkiye sıfır fiyatı** + bileşik yıllık amortisman uygulanır
+
 ```
-Taban fiyat:          800.000 TL
-- Yaş cezası:         (güncel_yıl - model_yılı) × 25.000 TL
-- Kilometre cezası:   kilometre × 1,2 TL
-- Hasar indirimi:     × 0,80  (hasar kaydı varsa %20 indirim)
-- Rastgele varyans:   ±15.000 TL
-- Minimum tavan:      50.000 TL
+# Fallback formülü (services.py)
+baz_fiyat            = MARKA_BAZ_FIYAT[marka]                # Toyota 2.4M, BMW 4.5M, Dacia 1.5M, Porsche 8M ...
+taban                = amortize(baz_fiyat, yas)              # bileşik %18→%14→%11→%9→%8→%7→%7→%6→%6→%5
+beklenen_km          = yas × 15.000                          # Türkiye yıllık ortalama
+km_etkisi            = -(kilometre - beklenen_km)/1000 × taban × 0,001
+hasar_etkisi         = -taban × 0,20      (hasar kaydı varsa)
+piyasa_dalgalanmasi  = ±%2 rastgele varyans
+minimum              = 50.000 TL
 ```
 
+**Client-side çarpanlar (UI tarafında uygulanır):**
+
+| Faktör | Etki Aralığı |
+|---|---|
+| Yakıt tipi (hibrit, elektrik vb.) | -5% … +15% |
+| Vites (otomatik prim) | +0% … +5% |
+| Kasa tipi (SUV, coupe, hatchback) | -3% … +16% |
+| Çekiş (AWD primi) | +0% … +13% |
+| Renk (popüler/nadir) | -3% … +2% |
+| Boyalı panel sayısı | 0 … -8% |
+
 Yanıtta `faktorler` alanı her faktörün katkısını ayrı ayrı gösterir (UI'da DNA grafiği olarak görselleştirilir).
+
+### Türkiye Vergi Hesabı (UI)
+
+| Vergi | Hesap |
+|---|---|
+| **ÖTV** | Benzin/dizel: 1600cc altı %80, 1600–2000cc %130, 2000cc üstü %220 / Hibrit: %50 / Elektrik: %10 |
+| **KDV** | %20 (ÖTV'li bedel üzerinden) |
+| **MTV** | Yıllık, motor cc ve yaşa göre kademeli |
+| **Kasko / trafik sigortası** | Tahmini yıllık prim |
+| **Noter devir ücreti** | Satış bedelinin ~%1.1'i |
 
 ---
 
