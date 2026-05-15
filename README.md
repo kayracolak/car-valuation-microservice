@@ -449,6 +449,36 @@ Jaeger: http://localhost:16686 → Service: `api-gateway` → Find Traces
 
 ---
 
+## Database
+
+The Auth Service uses **SQLite** to store users. SQLite is built into Python, so no extra setup is needed.
+
+- The database file is `users.db` inside the `auth-service` container at `/data/users.db`.
+- It is mounted to a Docker volume named `auth-data`, so the data stays even after `docker-compose down`.
+- Only one table is used: `users (username, password_hash)`. Passwords are stored as bcrypt hashes, never as plain text.
+
+### How to See the Stored Data
+
+**Option 1 — Check the file exists:**
+```bash
+docker exec -it auth-service sh -c "ls -la /data"
+```
+
+**Option 2 — Print all users:**
+```bash
+docker exec -it auth-service python -c "import sqlite3; print(sqlite3.connect('/data/users.db').execute('SELECT * FROM users').fetchall())"
+```
+
+**Option 3 — Count registered users:**
+```bash
+curl http://localhost:8001/health
+```
+
+**Option 4 — Docker Desktop app:**
+Open Docker Desktop → **Containers** → `auth-service` → **Files** tab → open the `data` folder → see `users.db`.
+
+---
+
 ## Automated Tests
 
 ```bash

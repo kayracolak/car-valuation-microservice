@@ -1,5 +1,6 @@
 import logging
 import os
+import sqlite3
 import sys
 from contextvars import ContextVar
 from datetime import datetime, timedelta
@@ -72,7 +73,16 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 if len(SECRET_KEY) < 32:
     logger.warning("JWT_SECRET_KEY 32 karakterden kısa — production için güvenli bir key kullanın!")
 
-users_db: dict[str, str] = {}
+DB_PATH = os.getenv("DB_PATH", "/data/users.db")
+
+def _get_db():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password_hash TEXT NOT NULL)"
+    )
+    conn.commit()
+    return conn
 
 
 class UserRegister(BaseModel):
@@ -111,10 +121,12 @@ def create_access_token(data: dict) -> str:
 
 @app.get("/health")
 def health():
+    with _get_db() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     return {
         "status": "ok",
         "service": SERVICE_NAME,
-        "users_registered": len(users_db),
+        "users_registered": count,
     }
 
 
@@ -268,9 +280,16 @@ def ana_sayfa():
 @app.post("/register", status_code=201)
 @_limiter.limit("10/minute")
 def register(request: Request, user: UserRegister):
-    if user.username in users_db:
-        raise HTTPException(status_code=400, detail="Bu kullanıcı adı zaten alınmış!")
-    users_db[user.username] = hash_password(user.password)
+    with _get_db() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM users WHERE username = ?", (user.username,)
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=400, detail="Bu kullanıcı adı zaten alınmış!")
+        conn.execute(
+            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+            (user.username, hash_password(user.password)),
+        )
     logger.info("Yeni kullanıcı kaydedildi", extra={"username": user.username})
     return {"mesaj": f"'{user.username}' kullanıcısı başarıyla oluşturuldu!"}
 
@@ -278,8 +297,11 @@ def register(request: Request, user: UserRegister):
 @app.post("/login")
 @_limiter.limit("20/minute")
 def login(request: Request, user: UserLogin):
-    stored_hash = users_db.get(user.username)
-    if not stored_hash or not verify_password(user.password, stored_hash):
+    with _get_db() as conn:
+        row = conn.execute(
+            "SELECT password_hash FROM users WHERE username = ?", (user.username,)
+        ).fetchone()
+    if not row or not verify_password(user.password, row[0]):
         logger.warning("Başarısız giriş denemesi", extra={"username": user.username})
         raise HTTPException(status_code=401, detail="Kullanıcı adı veya şifre hatalı!")
     token = create_access_token({"sub": user.username})

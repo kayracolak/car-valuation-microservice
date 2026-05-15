@@ -11,18 +11,32 @@ def load_service(service_dir, module_name):
     spec.loader.exec_module(mod)
     return mod
 
+import tempfile
+
 auth_main = load_service("auth-service", "auth_main")
 app = auth_main.app
-users_db = auth_main.users_db
 
 from fastapi.testclient import TestClient
 
 client = TestClient(app)
 
+_tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+auth_main.DB_PATH = _tmp_db.name
+
+
+def _db_users():
+    conn = auth_main._get_db()
+    rows = conn.execute("SELECT username, password_hash FROM users").fetchall()
+    conn.close()
+    return {r[0]: r[1] for r in rows}
+
 
 def setup_function():
     """Her testten önce kullanıcı veritabanını temizle."""
-    users_db.clear()
+    conn = auth_main._get_db()
+    conn.execute("DELETE FROM users")
+    conn.commit()
+    conn.close()
 
 
 def test_health_check():
@@ -68,5 +82,6 @@ def test_login_nonexistent_user():
 def test_password_is_hashed():
     """Şifre düz metin olarak saklanmamalı."""
     client.post("/register", json={"username": "hasan", "password": "acik_sifre"})
-    assert users_db.get("hasan") != "acik_sifre"
-    assert users_db.get("hasan") is not None
+    users = _db_users()
+    assert users.get("hasan") != "acik_sifre"
+    assert users.get("hasan") is not None

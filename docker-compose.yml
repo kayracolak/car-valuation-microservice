@@ -28,6 +28,9 @@ services:
       - "8001:8001"
     environment:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-gizli_jwt_anahtari_degistir_123}
+      - DB_PATH=/data/users.db
+    volumes:
+      - auth-data:/data
     networks:
       - microservice-network
     healthcheck:
@@ -191,3 +194,6 @@ services:
 networks:
   microservice-network:
     driver: bridge
+
+volumes:
+  auth-data:
