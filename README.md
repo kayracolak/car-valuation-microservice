@@ -1,8 +1,8 @@
-# Araç Değerleme Sistemi — Mikroservis Mimarisi
+# Car Valuation System — Microservice Architecture
 
-## Ekip
+## Team
 
-| İsim | Öğrenci No |
+| Name | Student ID |
 |---|---|
 | Kayra Çolak | B2180.060068 |
 | Mustafa Yalçın Canbay | B2180.060055 |
@@ -11,38 +11,38 @@
 
 ---
 
-## Projeye Genel Bakış
+## About the Project
 
-Mikroservis mimarisiyle geliştirilmiş bir araç değerleme sistemi. Kullanıcılar kayıt olup giriş yaparak JWT korumalı endpoint üzerinden yapay zeka destekli fiyat tahmini, piyasa analizi ve pazarlık argümanı üretme özelliklerinden yararlanabilir.
+This is a car valuation system. It uses microservice architecture. Users can register and log in. After login, they can get an AI price estimate, see market analysis, and get bargaining tips. The system uses JWT tokens to protect the endpoints.
 
-**Bu ödevde eklenen katmanlar:**
-- Güvenlik: bcrypt şifre hashleme, rate limiting, güvenli secret yönetimi
-- Gözlemlenebilirlik: ELK, Prometheus + Grafana, OpenTelemetry + Jaeger, health check
-- Hata toleransı: circuit breaker, retry/backoff, dead letter queue
-- Piyasa zekası: Market Data Service (sahibinden.com / arabam.com ilhamlı)
-- Gerçek fiyat verisi: RapidAPI Vehicle Pricing entegrasyonu + marka bazlı 2026 Türkiye fiyat tablosu
-- Türkiye vergi hesabı: ÖTV (motor cc'ye göre), KDV, MTV, kasko, sigorta, devir masrafları
-- Gelişmiş AI: fiyat analizi, 6 aylık öngörü, AI chatbot, Pazarlık Koçu
-- Detaylı UI: 4 bölümlü form (kimlik, teknik, durum, konum) + 5 sekmeli sonuç
+**New features added in this homework:**
+- Security: bcrypt password hashing, rate limiting, safe secret management
+- Observability: ELK, Prometheus + Grafana, OpenTelemetry + Jaeger, health check
+- Fault tolerance: circuit breaker, retry/backoff, dead letter queue
+- Market intelligence: Market Data Service (inspired by sahibinden.com / arabam.com)
+- Real price data: RapidAPI Vehicle Pricing + 2026 Turkey brand price table
+- Turkey tax calculation: SCT (by engine cc), VAT, motor tax, insurance, transfer costs
+- Advanced AI: price analysis, 6-month forecast, AI chatbot, Bargaining Coach
+- Detailed UI: 4-section form (identity, technical, condition, location) + 5-tab result
 
 ---
 
-## Mimari
+## Architecture
 
-### Uygulama Akışı
+### Application Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         KULLANICI / TARAYICI                    │
+│                         USER / BROWSER                          │
 └───────────────────────────────┬─────────────────────────────────┘
                                 │ HTTP
                                 ▼
                 ┌───────────────────────────────┐
                 │    API GATEWAY  :8080          │
-                │  · JWT doğrulama               │
+                │  · JWT validation              │
                 │  · Rate limiting (slowapi)     │
-                │  · İstek yönlendirme           │
-                │  · X-Trace-ID üretimi          │
+                │  · Request routing             │
+                │  · X-Trace-ID generation       │
                 └──────────┬────────────┬────────┘
                            │            │
               REST/HTTP     │            │  REST/HTTP
@@ -50,12 +50,12 @@ Mikroservis mimarisiyle geliştirilmiş bir araç değerleme sistemi. Kullanıc�
               ┌────────────────┐  ┌──────────────────────────┐
               │  AUTH SERVICE  │  │   VALUATION SERVICE      │
               │    :8001       │  │        :8000             │
-              │  · Kayıt/Giriş │  │  · RapidAPI fiyat çekme  │
-              │  · bcrypt hash │  │  · Marka bazlı fallback  │
-              │  · JWT üretimi │  │  · GPT-4o-mini analizi   │
-              └────────────────┘  │  · Pazarlık Koçu (nano)  │
+              │  · Register    │  │  · RapidAPI price fetch  │
+              │  · bcrypt hash │  │  · Brand-based fallback  │
+              │  · JWT token   │  │  · GPT-4o-mini analysis  │
+              └────────────────┘  │  · Bargaining Coach      │
                                   │  · AI chatbot            │
-                                  │  · RabbitMQ yayını       │
+                                  │  · RabbitMQ publish      │
                                   └──────────┬───────────────┘
                                              │
                        ┌─────────────────────┼─────────────────────┐
@@ -64,9 +64,9 @@ Mikroservis mimarisiyle geliştirilmiş bir araç değerleme sistemi. Kullanıc�
               ┌────────────────┐   ┌──────────────────┐   ┌────────────────┐
               │ MARKET DATA    │   │  RapidAPI        │   │  OpenAI API    │
               │    :8002       │   │  Vehicle Pricing │   │  GPT-4o-mini   │
-              │ · Benzer ilan  │   │  (gerçek fiyat)  │   │  GPT-4.1-nano  │
-              │ · Şehir çarpan │   └──────────────────┘   └────────────────┘
-              │ · Talep skoru  │
+              │ · Similar ads  │   │  (real price)    │   │  GPT-4.1-nano  │
+              │ · City factor  │   └──────────────────┘   └────────────────┘
+              │ · Demand score │
               └────────────────┘
                                              │ AMQP
                                              ▼
@@ -76,27 +76,27 @@ Mikroservis mimarisiyle geliştirilmiş bir araç değerleme sistemi. Kullanıc�
                               └──────────────────────────┘
 ```
 
-### Gözlemlenebilirlik Katmanı
+### Observability Layer
 
 ```
-Tüm Servisler (stdout JSON log) ──► Filebeat ──► Elasticsearch ──► Kibana :5601
-Tüm Servisler (/metrics)         ──► Prometheus :9090 ──► Grafana :3000
-Tüm Servisler (OTLP HTTP spans)  ──► Jaeger :4318 ──► Jaeger UI :16686
+All Services (stdout JSON log) ──► Filebeat ──► Elasticsearch ──► Kibana :5601
+All Services (/metrics)        ──► Prometheus :9090 ──► Grafana :3000
+All Services (OTLP HTTP spans) ──► Jaeger :4318 ──► Jaeger UI :16686
 ```
 
-### Mermaid Diyagram
+### Mermaid Diagram
 
 ```mermaid
 graph TD
-    Client([Kullanıcı]) -->|HTTP| GW[API Gateway :8080]
+    Client([User]) -->|HTTP| GW[API Gateway :8080]
 
     GW -->|/register /login| Auth[Auth Service :8001]
     GW -->|/degerleme JWT| Val[Valuation Service :8000]
     GW -->|/arac-asistan JWT| Val
     GW -->|/pazarlik-kocu JWT| Val
 
-    Val -->|GPT-4o-mini analiz| OAI([OpenAI API])
-    Val -->|GPT-4.1-nano pazarlık| OAI
+    Val -->|GPT-4o-mini analysis| OAI([OpenAI API])
+    Val -->|GPT-4.1-nano bargain| OAI
     Val -->|maker/model/year| RAPI([RapidAPI Vehicle Pricing])
     Val -->|HTTP| MDS[Market Data :8002]
     Val -->|AMQP| MQ[(RabbitMQ + DLQ)]
@@ -116,159 +116,159 @@ graph TD
 
 ---
 
-## Servisler
+## Services
 
-| Servis | Port | Görev |
+| Service | Port | Job |
 |---|---|---|
-| API Gateway | 8080 | Tek giriş noktası, JWT doğrulama, rate limiting, yönlendirme |
-| Auth Service | 8001 | Kullanıcı kaydı (bcrypt), giriş, JWT üretimi |
-| Valuation Service | 8000 | Fiyat hesaplama + AI analizi + Pazarlık Koçu + chatbot |
-| Notification Service | — | RabbitMQ tüketici, bildirim simülasyonu |
-| Market Data Service | 8002 | Piyasa zekası — benzer ilanlar, şehir bazlı fiyat, talep skoru |
-| RabbitMQ | 5672 / 15672 | Asenkron mesaj kuyruğu |
-| Elasticsearch | 9200 | Log depolama |
-| Kibana | 5601 | Log görselleştirme |
-| Prometheus | 9090 | Metrik toplama |
-| Grafana | 3000 | Metrik dashboard |
+| API Gateway | 8080 | Single entry point, JWT validation, rate limiting, routing |
+| Auth Service | 8001 | User registration (bcrypt), login, JWT generation |
+| Valuation Service | 8000 | Price calculation + AI analysis + Bargaining Coach + chatbot |
+| Notification Service | — | RabbitMQ consumer, notification simulation |
+| Market Data Service | 8002 | Market intelligence — similar listings, city-based price, demand score |
+| RabbitMQ | 5672 / 15672 | Async message queue |
+| Elasticsearch | 9200 | Log storage |
+| Kibana | 5601 | Log visualization |
+| Prometheus | 9090 | Metric collection |
+| Grafana | 3000 | Metric dashboard |
 | Jaeger | 16686 | Distributed tracing UI |
 
 ---
 
-## Teknoloji Yığını
+## Technology Stack
 
-| Kategori | Teknoloji |
+| Category | Technology |
 |---|---|
 | API Framework | FastAPI + Python 3.11 |
-| Kimlik Doğrulama | JWT (HS256, 30 dk) + bcrypt şifre hashleme |
-| Rate Limiting | slowapi (per-IP, 10–30 istek/dk) |
-| Secret Yönetimi | Ortam değişkenleri (.env) |
-| Asenkron Mesajlaşma | RabbitMQ + pika |
-| AI Entegrasyonu | OpenAI GPT-4o-mini (analiz) + GPT-4.1-nano (pazarlık) |
-| Gerçek Fiyat Verisi | RapidAPI Vehicle Pricing API (httpx ile) |
-| Vergi Modeli | Türkiye ÖTV (motor cc/yakıt bazlı kademeli) + KDV + MTV |
-| Konteynerizasyon | Docker + Docker Compose |
-| Orkestrasyon | Kubernetes |
+| Authentication | JWT (HS256, 30 min) + bcrypt password hashing |
+| Rate Limiting | slowapi (per-IP, 10–30 requests/min) |
+| Secret Management | Environment variables (.env) |
+| Async Messaging | RabbitMQ + pika |
+| AI Integration | OpenAI GPT-4o-mini (analysis) + GPT-4.1-nano (bargaining) |
+| Real Price Data | RapidAPI Vehicle Pricing API (via httpx) |
+| Tax Model | Turkey SCT (by engine cc/fuel, tiered) + VAT + Motor Tax |
+| Containerization | Docker + Docker Compose |
+| Orchestration | Kubernetes |
 | CI/CD | GitHub Actions |
-| Test | pytest (21 test) |
-| Piyasa Zekası | Market Data Service (sahibinden/arabam ilhamlı) |
-| Merkezi Loglama | ELK Stack + Filebeat |
+| Testing | pytest (21 tests) |
+| Market Intelligence | Market Data Service (sahibinden/arabam inspired) |
+| Central Logging | ELK Stack + Filebeat |
 | Structured Logging | python-json-logger |
-| Metrik İzleme | Prometheus + Grafana |
-| Dağıtık İzleme | OpenTelemetry + Jaeger |
+| Metric Monitoring | Prometheus + Grafana |
+| Distributed Tracing | OpenTelemetry + Jaeger |
 | Circuit Breaker | pybreaker |
 | Retry / Backoff | tenacity |
 
 ---
 
-## Hızlı Başlangıç
+## Quick Start
 
-### 1. Gereksinimler
+### 1. Requirements
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) kurulu ve çalışıyor
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
 - OpenAI API key
 
-### 2. Ortam Değişkenlerini Ayarla
+### 2. Set Environment Variables
 
 ```bash
 cp .env.example .env
-# .env dosyasını düzenle
+# edit the .env file
 ```
 
-`.env` içeriği:
+`.env` contents:
 ```
-OPENAI_API_KEY=sk-proj-...              # AI analiz + chatbot + pazarlık koçu için zorunlu
-JWT_SECRET_KEY=en-az-32-karakterlik-guclu-anahtar
-RAPIDAPI_KEY=...                        # Vehicle Pricing API (gerçek fiyat verisi); yoksa fallback devreye girer
-USD_TO_TRL=35                           # opsiyonel, varsayılan 35
+OPENAI_API_KEY=sk-proj-...              # required for AI analysis + chatbot + bargaining coach
+JWT_SECRET_KEY=at-least-32-chars-strong-key
+RAPIDAPI_KEY=...                        # Vehicle Pricing API (real price data); fallback is used if missing
+USD_TO_TRL=35                           # optional, default is 35
 ```
 
-> `.env.example` git'e giden şablondur — gerçek değerleri `.env`'e yaz, bu dosya `.gitignore`'dadır.
-> `RAPIDAPI_KEY` yoksa sistem marka bazlı 2026 Türkiye fiyat tablosu + bileşik amortisman ile çalışır.
+> `.env.example` is the template file that goes to git — write real values to `.env`, this file is in `.gitignore`.
+> If `RAPIDAPI_KEY` is missing, the system uses a brand-based 2026 Turkey price table + compound depreciation.
 
-### 3. Başlat
+### 3. Start
 
-**Hafif (sadece uygulama, ~400 MB RAM):**
+**Light mode (only app services, ~400 MB RAM):**
 ```bash
 docker-compose up -d auth-service valuation-service market-data-service api-gateway rabbitmq
 ```
 
-**Tam stack, monitoring dahil (~1.5 GB RAM):**
+**Full stack with monitoring (~1.5 GB RAM):**
 ```bash
 docker-compose up -d
 ```
 
-> İlk çalıştırmada Elasticsearch + Kibana image'ları ~2 GB indirilir, 10-15 dakika sürebilir.
+> On the first run, Elasticsearch + Kibana images are about 2 GB. Download can take 10–15 minutes.
 
 ```bash
-docker-compose down        # durdur
-docker-compose down -v     # durdur + verileri sıfırla
-docker-compose up -d --build   # kod değişikliği sonrası yeniden build
+docker-compose down        # stop
+docker-compose down -v     # stop + reset data
+docker-compose up -d --build   # rebuild after code changes
 ```
 
 ---
 
-## Tüm Erişim Noktaları
+## Access Points
 
-| URL | Açıklama | Giriş |
+| URL | Description | Login |
 |---|---|---|
-| **http://localhost:8080** | **Tek sayfa UI** — kayıt, giriş, değerleme, AI koç, asistan | — |
+| **http://localhost:8080** | **Single page UI** — register, login, valuation, AI coach, assistant | — |
 | http://localhost:8000 | Valuation Service (API) | — |
 | http://localhost:8001 | Auth Service (API) | — |
 | http://localhost:8002 | Market Data Service (API) | — |
-| http://localhost:15672 | RabbitMQ paneli | `guest` / `guest` |
+| http://localhost:15672 | RabbitMQ panel | `guest` / `guest` |
 | http://localhost:3000 | Grafana dashboard | `admin` / `admin` |
 | http://localhost:16686 | Jaeger tracing | — |
 | http://localhost:9090 | Prometheus | — |
-| http://localhost:5601 | Kibana logları | — |
+| http://localhost:5601 | Kibana logs | — |
 
-> Tüm kullanıcı işlemleri 8080'den geçer. Diğer portlar yalnızca API endpoint'leri sunar.
+> All user actions go through port 8080. Other ports only serve API endpoints.
 
 ### Health Check
 
 ```bash
-curl http://localhost:8080/health   # Gateway + bağımlılıklar
+curl http://localhost:8080/health   # Gateway + dependencies
 curl http://localhost:8000/health   # Valuation + RabbitMQ + circuit breaker
 curl http://localhost:8001/health   # Auth
 ```
 
 ---
 
-## Güvenlik
+## Security
 
-### bcrypt Şifre Hashleme
+### bcrypt Password Hashing
 
-Şifreler veritabanında **asla düz metin** saklanmaz. Her şifre için rastgele salt üretilir:
+Passwords are **never stored as plain text**. A random salt is created for each password:
 
 ```
-Kayıt: "pass123" → bcrypt(salt) → "$2b$12$abc...xyz"
-Giriş: bcrypt.checkpw("pass123", stored_hash) → True/False
+Register: "pass123" → bcrypt(salt) → "$2b$12$abc...xyz"
+Login:    bcrypt.checkpw("pass123", stored_hash) → True/False
 ```
 
 ### Rate Limiting
 
-Her endpoint IP başına dakika bazında sınırlıdır:
+Each endpoint has a per-IP, per-minute limit:
 
 | Endpoint | Limit |
 |---|---|
-| `POST /register` | 10 istek/dk |
-| `POST /login` | 20 istek/dk |
-| `POST /api/v1/degerleme` | 30 istek/dk |
-| `POST /api/v1/arac-asistan` | 10 istek/dk |
+| `POST /register` | 10 requests/min |
+| `POST /login` | 20 requests/min |
+| `POST /api/v1/degerleme` | 30 requests/min |
+| `POST /api/v1/arac-asistan` | 10 requests/min |
 
-Sınır aşılınca `429 Too Many Requests` döner.
+When the limit is exceeded, the server returns `429 Too Many Requests`.
 
-### Secure Secret Yönetimi
+### Secure Secret Management
 
-`JWT_SECRET_KEY` ortam değişkeninden okunur. Kısa key ile başlatılırsa servis uyarı loglar:
+`JWT_SECRET_KEY` is read from the environment variable. If a short key is used, the service logs a warning:
 ```
-WARNING: JWT_SECRET_KEY 32 karakterden kısa — production için güvenli bir key kullanın!
+WARNING: JWT_SECRET_KEY is shorter than 32 characters — use a secure key for production!
 ```
 
 ---
 
-## API Kullanımı
+## API Usage
 
-### Adım 1 — Kayıt Ol
+### Step 1 — Register
 
 ```bash
 curl -X POST http://localhost:8080/register \
@@ -277,16 +277,16 @@ curl -X POST http://localhost:8080/register \
 # HTTP 201
 ```
 
-### Adım 2 — Giriş Yap
+### Step 2 — Login
 
 ```bash
 curl -X POST http://localhost:8080/login \
   -H "Content-Type: application/json" \
   -d '{"username": "testuser", "password": "pass123"}'
-# Yanıt: {"access_token": "eyJ...", "token_type": "bearer"}
+# Response: {"access_token": "eyJ...", "token_type": "bearer"}
 ```
 
-### Adım 3 — Araç Değerle
+### Step 3 — Value a Car
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/degerleme \
@@ -295,9 +295,9 @@ curl -X POST http://localhost:8080/api/v1/degerleme \
   -d '{"marka":"Toyota","model":"Corolla","model_yili":2020,"kilometre":50000,"hasar_kaydi":false,"il":"istanbul"}'
 ```
 
-> `model` alanı opsiyoneldir; verilirse RapidAPI Vehicle Pricing endpoint'inden gerçek fiyat çekilir. Verilmezse marka bazlı 2026 baz fiyat + bileşik amortisman uygulanır.
+> The `model` field is optional. If given, real price data is fetched from RapidAPI Vehicle Pricing. If not given, a brand-based 2026 base price + compound depreciation is used.
 
-**Örnek yanıt:**
+**Example response:**
 ```json
 {
   "hesaplanan_fiyat_tl": 1245000,
@@ -309,19 +309,19 @@ curl -X POST http://localhost:8080/api/v1/degerleme \
     "piyasa_dalgalanmasi": -20000
   },
   "ai_analizi": {
-    "piyasa_yorumu": "Fiyat piyasa koşullarına göre rekabetçi.",
-    "ozet": "Düşük kilometre güçlü yön.",
-    "ongoru": "6 ay içinde fiyat stabil kalması bekleniyor.",
-    "alici_profili": "Güvenilir araç arayan aileler için ideal.",
-    "satis_taktigi": "İlkbahar sezonunda İstanbul'da listeleyin."
+    "piyasa_yorumu": "Price is competitive for market conditions.",
+    "ozet": "Low mileage is a strong point.",
+    "ongoru": "Price is expected to stay stable in 6 months.",
+    "alici_profili": "Ideal for families looking for a reliable car.",
+    "satis_taktigi": "List it in Istanbul in spring season."
   },
   "piyasa_raporu": { ... }
 }
 ```
 
-### Adım 4 — Pazarlık Koçu (AI)
+### Step 4 — Bargaining Coach (AI)
 
-Satıcının istediği fiyat karşısında AI'dan somut pazarlık argümanları al:
+Get real bargaining arguments from AI against the seller's asking price:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/pazarlik-kocu \
@@ -333,123 +333,123 @@ curl -X POST http://localhost:8000/api/v1/pazarlik-kocu \
   }'
 ```
 
-**Yanıt:** 4 pazarlık argümanı + hedef fiyat + alt sınır (gpt-4.1-nano ile üretilir)
+**Response:** 4 bargaining arguments + target price + lower limit (generated with gpt-4.1-nano)
 
-### Adım 5 — AI Araç Asistanı
+### Step 5 — AI Car Assistant
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/arac-asistan \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <TOKEN>" \
-  -d '{"soru": "Bu aracı şimdi almalı mıyım?", "gecmis": []}'
+  -d '{"soru": "Should I buy this car now?", "gecmis": []}'
 ```
 
 ---
 
-## Kullanıcı Arayüzü
+## User Interface
 
-Tek sayfa SPA — http://localhost:8080/ üzerinden tüm akış.
+Single page SPA — full flow at http://localhost:8080/
 
-### Giriş Formu — 4 Bölüm
+### Input Form — 4 Sections
 
-| Bölüm | İçerik |
+| Section | Content |
 |---|---|
-| 🏷️ **Araç Kimliği** | Marka, model, yıl |
-| ⚙️ **Teknik Özellikler** | Yakıt tipi (benzin/dizel/hibrit/elektrik/LPG), vites, kasa tipi, motor cc, beygir, çekiş (FWD/RWD/AWD) |
-| 🔍 **Durum & Görünüm** | Kilometre, boyalı panel sayısı, renk (11 seçenek), hasar kaydı, değişen parça |
-| 📍 **Konum** | Şehir seçimi (fiyat % indikatörlü) |
+| 🏷️ **Car Identity** | Brand, model, year |
+| ⚙️ **Technical Details** | Fuel type (petrol/diesel/hybrid/electric/LPG), transmission, body type, engine cc, horsepower, drive (FWD/RWD/AWD) |
+| 🔍 **Condition & Appearance** | Mileage, number of painted panels, color (11 options), accident record, replaced parts |
+| 📍 **Location** | City selection (with price % indicator) |
 
-> Backend yalnızca marka/model/yıl/km/hasar/il alır. Diğer alanlar **client-side çarpan** olarak uygulanır (örn. AWD +13%, SUV +16%, hibrit +8%).
+> The backend only takes brand/model/year/mileage/accident/city. Other fields are applied as **client-side multipliers** (e.g. AWD +13%, SUV +16%, hybrid +8%).
 
-### Sonuç Sekmeleri — 5 Sekme
+### Result Tabs — 5 Tabs
 
-| Sekme | İçerik |
+| Tab | Content |
 |---|---|
-| 📊 **Özet** | Animasyonlu fiyat sayacı, piyasa pozisyon çubuğu, SVG talep göstergesi, Fiyat DNA analizi (özellik düzeltmesi dahil) |
-| 🏛️ **Vergiler & Maliyet** | ÖTV (motor cc'ye göre %10–220), KDV (%20), MTV, kasko, sigorta, yıllık bakım, muayene, noter devir ücreti |
-| 📈 **Piyasa** | Benzer ilanlar, şehir bazlı fiyat karşılaştırması, değer tahmini, uyarılar |
-| 🧠 **AI Koç** | 6 aylık öngörü, ideal alıcı profili, satış taktiği + Pazarlık Koçu aracı |
-| 💬 **Asistan** | Araç bağlamını bilen AI chatbot |
+| 📊 **Summary** | Animated price counter, market position bar, SVG demand gauge, Price DNA analysis (with feature adjustments) |
+| 🏛️ **Taxes & Costs** | SCT (by engine cc: 10%–220%), VAT (20%), motor tax, insurance, annual maintenance, inspection, notary transfer fee |
+| 📈 **Market** | Similar listings, city-based price comparison, value estimate, warnings |
+| 🧠 **AI Coach** | 6-month forecast, ideal buyer profile, sales tactic + Bargaining Coach tool |
+| 💬 **Assistant** | AI chatbot that knows the car context |
 
 ---
 
-## Fiyat Hesaplama Algoritması
+## Price Calculation Algorithm
 
-**Önceliklendirme:**
-1. Eğer `model` verildi ve `RAPIDAPI_KEY` aktifse → **RapidAPI Vehicle Pricing** endpoint'inden o yılın gerçek fiyat aralığı çekilir, USD → TRL çevrilir
-2. Aksi halde → **marka bazlı 2026 Türkiye sıfır fiyatı** + bileşik yıllık amortisman uygulanır
+**Priority order:**
+1. If `model` is given and `RAPIDAPI_KEY` is active → real price range for that year is fetched from **RapidAPI Vehicle Pricing**, converted USD → TRY
+2. Otherwise → **brand-based 2026 Turkey new car price** + compound annual depreciation
 
 ```
-# Fallback formülü (services.py)
-baz_fiyat            = MARKA_BAZ_FIYAT[marka]                # Toyota 2.4M, BMW 4.5M, Dacia 1.5M, Porsche 8M ...
-taban                = amortize(baz_fiyat, yas)              # bileşik %18→%14→%11→%9→%8→%7→%7→%6→%6→%5
-beklenen_km          = yas × 15.000                          # Türkiye yıllık ortalama
-km_etkisi            = -(kilometre - beklenen_km)/1000 × taban × 0,001
-hasar_etkisi         = -taban × 0,20      (hasar kaydı varsa)
-piyasa_dalgalanmasi  = ±%2 rastgele varyans
-minimum              = 50.000 TL
+# Fallback formula (services.py)
+base_price           = BRAND_BASE_PRICE[brand]               # Toyota 2.4M, BMW 4.5M, Dacia 1.5M, Porsche 8M ...
+floor_price          = depreciate(base_price, age)           # compound 18%→14%→11%→9%→8%→7%→7%→6%→6%→5%
+expected_km          = age × 15,000                          # Turkey annual average
+km_effect            = -(mileage - expected_km)/1000 × floor_price × 0.001
+accident_effect      = -floor_price × 0.20      (if accident record exists)
+market_fluctuation   = ±2% random variance
+minimum              = 50,000 TRY
 ```
 
-**Client-side çarpanlar (UI tarafında uygulanır):**
+**Client-side multipliers (applied in UI):**
 
-| Faktör | Etki Aralığı |
+| Factor | Effect Range |
 |---|---|
-| Yakıt tipi (hibrit, elektrik vb.) | -5% … +15% |
-| Vites (otomatik prim) | +0% … +5% |
-| Kasa tipi (SUV, coupe, hatchback) | -3% … +16% |
-| Çekiş (AWD primi) | +0% … +13% |
-| Renk (popüler/nadir) | -3% … +2% |
-| Boyalı panel sayısı | 0 … -8% |
+| Fuel type (hybrid, electric, etc.) | -5% … +15% |
+| Transmission (automatic premium) | +0% … +5% |
+| Body type (SUV, coupe, hatchback) | -3% … +16% |
+| Drive (AWD premium) | +0% … +13% |
+| Color (popular/rare) | -3% … +2% |
+| Number of painted panels | 0 … -8% |
 
-Yanıtta `faktorler` alanı her faktörün katkısını ayrı ayrı gösterir (UI'da DNA grafiği olarak görselleştirilir).
+The response `faktorler` field shows the contribution of each factor separately (shown as a DNA chart in the UI).
 
-### Türkiye Vergi Hesabı (UI)
+### Turkey Tax Calculation (UI)
 
-| Vergi | Hesap |
+| Tax | Calculation |
 |---|---|
-| **ÖTV** | Benzin/dizel: 1600cc altı %80, 1600–2000cc %130, 2000cc üstü %220 / Hibrit: %50 / Elektrik: %10 |
-| **KDV** | %20 (ÖTV'li bedel üzerinden) |
-| **MTV** | Yıllık, motor cc ve yaşa göre kademeli |
-| **Kasko / trafik sigortası** | Tahmini yıllık prim |
-| **Noter devir ücreti** | Satış bedelinin ~%1.1'i |
+| **SCT** | Petrol/diesel: under 1600cc 80%, 1600–2000cc 130%, over 2000cc 220% / Hybrid: 50% / Electric: 10% |
+| **VAT** | 20% (on price including SCT) |
+| **Motor Tax** | Annual, tiered by engine cc and age |
+| **Comprehensive / traffic insurance** | Estimated annual premium |
+| **Notary transfer fee** | ~1.1% of sale price |
 
 ---
 
-## Gözlemlenebilirlik
+## Observability
 
-### Merkezi Loglama — ELK Stack
+### Central Logging — ELK Stack
 
-Her log satırında `service`, `level`, `trace_id`, `message` alanları bulunur. Kibana'da:
-1. http://localhost:5601 → **Discover** → `microservices-*` data view oluştur
-2. Örnek filtre: `trace_id: "abc123"` → tek isteğin tüm servislerdeki izini gör
+Each log line has `service`, `level`, `trace_id`, `message` fields. In Kibana:
+1. http://localhost:5601 → **Discover** → create `microservices-*` data view
+2. Example filter: `trace_id: "abc123"` → see one request's trace across all services
 
-### Metrik İzleme — Prometheus + Grafana
+### Metric Monitoring — Prometheus + Grafana
 
-| Metrik | Açıklama |
+| Metric | Description |
 |---|---|
-| `http_requests_total` | Toplam istek sayısı |
+| `http_requests_total` | Total request count |
 | `http_request_duration_seconds` | p50 / p95 / p99 latency |
-| `valuation_price_tl` | Hesaplanan fiyat dağılımı |
-| `openai_api_calls_total` | OpenAI çağrıları (success/failure/circuit_open) |
-| `circuit_breaker_state` | 0=kapalı, 1=açık, 2=yarı-açık |
+| `valuation_price_tl` | Calculated price distribution |
+| `openai_api_calls_total` | OpenAI calls (success/failure/circuit_open) |
+| `circuit_breaker_state` | 0=closed, 1=open, 2=half-open |
 
-Grafana: http://localhost:3000 → `admin/admin` → **Araba Değerleme — Mikroservis Dashboard**
+Grafana: http://localhost:3000 → `admin/admin` → **Car Valuation — Microservice Dashboard**
 
-### Dağıtık İzleme — Jaeger
+### Distributed Tracing — Jaeger
 
 Jaeger: http://localhost:16686 → Service: `api-gateway` → Find Traces
 
-### Hata Toleransı
+### Fault Tolerance
 
-**Circuit Breaker (OpenAI):** 3 ardışık hata → devre açılır → 30 sn fallback döner → otomatik kapanır
+**Circuit Breaker (OpenAI):** 3 consecutive errors → circuit opens → returns fallback for 30s → closes automatically
 
-**Retry (RabbitMQ publish):** 3 deneme, 1s→2s→4s backoff
+**Retry (RabbitMQ publish):** 3 attempts, 1s→2s→4s backoff
 
-**Dead Letter Queue:** İşlenemeyen mesajlar `valuation_events_dlq`'ya taşınır
+**Dead Letter Queue:** Messages that cannot be processed are moved to `valuation_events_dlq`
 
 ---
 
-## Otomatik Testler
+## Automated Tests
 
 ```bash
 pip install -r requirements-test.txt
@@ -458,34 +458,34 @@ pytest tests/ -v
 
 ```
 tests/
-├── test_auth_service.py       # Kayıt, giriş, bcrypt hashleme (7 test)
-├── test_valuation_service.py  # Fiyat algoritması, hasar indirimi, AI fallback (7 test)
-└── test_api_gateway.py        # JWT doğrulama, rate limit, proxy, status code (7 test)
+├── test_auth_service.py       # Register, login, bcrypt hashing (7 tests)
+├── test_valuation_service.py  # Price algorithm, accident discount, AI fallback (7 tests)
+└── test_api_gateway.py        # JWT validation, rate limit, proxy, status codes (7 tests)
 ```
 
 ---
 
-## Proje Yapısı
+## Project Structure
 
 ```
 araba-degerleme-odevi/
-├── api-gateway/               # JWT + rate limiting + yönlendirme
-├── auth-service/              # bcrypt + JWT üretimi
-├── valuation-service/         # Fiyat motoru + AI + Pazarlık Koçu + chatbot
+├── api-gateway/               # JWT + rate limiting + routing
+├── auth-service/              # bcrypt + JWT generation
+├── valuation-service/         # Price engine + AI + Bargaining Coach + chatbot
 │   ├── main.py
-│   ├── models.py              AracOzellikleri, PazarlikIstegi
-│   └── services.py            fiyat_hesapla + fiyat_hesapla_detay
+│   ├── models.py              CarProperties, BargainingRequest
+│   └── services.py            calculate_price + calculate_price_detail
 ├── notification-service/      # RabbitMQ consumer
-├── market-data-service/       # Piyasa zekası motoru
+├── market-data-service/       # Market intelligence engine
 │   ├── main.py
-│   └── market_engine.py       Benzer ilanlar, şehir çarpanı, talep skoru, anomali
+│   └── market_engine.py       Similar listings, city multiplier, demand score, anomaly
 ├── monitoring/
 │   ├── prometheus/
-│   ├── grafana/               Otomatik datasource + 9 panelli dashboard
+│   ├── grafana/               Auto datasource + 9-panel dashboard
 │   ├── filebeat/
 │   └── rabbitmq/
-├── tests/                     21 otomatik test
-├── k8s/                       Kubernetes manifest'leri
+├── tests/                     21 automated tests
+├── k8s/                       Kubernetes manifests
 ├── .github/workflows/         GitHub Actions CI/CD
 ├── docker-compose.yml
 └── .env.example
@@ -493,14 +493,14 @@ araba-degerleme-odevi/
 
 ---
 
-## Kubernetes ile Çalıştırma
+## Running with Kubernetes
 
 ```bash
 eval $(minikube docker-env)
 docker compose build
-# k8s/secret.yaml içinde OPENAI_API_KEY ve JWT_SECRET_KEY ayarla
+# set OPENAI_API_KEY and JWT_SECRET_KEY in k8s/secret.yaml
 bash deploy.sh
 kubectl port-forward svc/api-gateway 8080:8080 -n araba-degerleme
 ```
 
-> Monitoring stack Docker Compose ortamına özeldir, Kubernetes manifest'leri yalnızca uygulama servislerini içerir.
+> The monitoring stack is for Docker Compose only. Kubernetes manifests include only the application services.
